@@ -9,6 +9,7 @@
 #define OLED_RESET 4
 #define TEXT_NUDGE_X 4
 #define TEXT_NUDGE_Y 2
+#define DEBUG false
 
 Adafruit_SSD1306 display(SCREEN_HEIGHT, SCREEN_WIDTH, &Wire, OLED_RESET);
 
@@ -22,7 +23,6 @@ void setup() {
   display.begin(SSD1306_SWITCHCAPVCC, 0x3C);
   display.setRotation(1);
   display.setTextWrap(false);
-  display.setTextColor(WHITE);
   display.clearDisplay();
   display.setTextSize(2);
   display.setFont(&FreeSans18pt7b);
@@ -43,37 +43,28 @@ void renderScoreNumber(int x, int y, int score, bool highlighted) {
   int16_t textX, textY;
   uint16_t textWidth, textHeight;
 
-  // display.drawRect(x, y, SCREEN_WIDTH, SCREEN_HEIGHT/2 - 4, WHITE);
+  if (highlighted) {
+    display.fillRoundRect(x, y, SCREEN_WIDTH, SCREEN_HEIGHT / 2, 4, WHITE);
+    display.setTextColor(BLACK);
+  } else {
+    display.setTextColor(WHITE);
+  }
+
   display.getTextBounds(scoreText, x, y, &textX, &textY, &textWidth, &textHeight);
 
-  // display.setCursor((SCREEN_WIDTH / 2) - (textWidth / 2), 50);
-  // display.println(scoreText);
+  if (DEBUG) {
+    display.drawRect(x + (SCREEN_WIDTH / 2) - (textWidth / 2), y + (SCREEN_HEIGHT / 2 / 2) - (textHeight / 2), textWidth, textHeight, WHITE);
+  }
 
-
-  display.drawRect((SCREEN_WIDTH / 2) - (textWidth / 2), (SCREEN_HEIGHT / 2 / 2) - (textHeight / 2), textWidth, textHeight, WHITE);
-  // display.drawRect(0, 0, textWidth, textHeight, WHITE);
-
-  display.setCursor((SCREEN_WIDTH / 2) - (textWidth / 2) - TEXT_NUDGE_X, (SCREEN_HEIGHT / 2 / 2) + (textHeight / 2) - TEXT_NUDGE_Y);
+  display.setCursor(x + (SCREEN_WIDTH / 2) - (textWidth / 2) - TEXT_NUDGE_X, y + (SCREEN_HEIGHT / 2 / 2) + (textHeight / 2) - TEXT_NUDGE_Y);
   display.print(scoreText);
 }
 
 void renderScoreScreen() {
   display.clearDisplay();
 
-  display.drawRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, WHITE);
-
-  renderScoreNumber(0, 0, score[0], false);
-  // renderScoreNumber(0, SCREEN_HEIGHT/2 + 4, score[1], false);
-
-  // display.drawRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT/2 - 4, WHITE);
-  // display.drawRect(0, SCREEN_HEIGHT/2 + 4, SCREEN_WIDTH, SCREEN_HEIGHT/2 - 4, WHITE);
-
-  // display.setCursor(0, 0);
-  // display.println(score[0]);
-  // display.setCursor(14, 125);
-  // display.println(score[1]);
-
-  display.drawLine(0, round(SCREEN_HEIGHT/2), SCREEN_WIDTH, round(SCREEN_HEIGHT/2), WHITE);
+  renderScoreNumber(0, 0, score[0], true);
+  renderScoreNumber(0, SCREEN_HEIGHT/2, score[1], false);
 
   display.display();
 }
