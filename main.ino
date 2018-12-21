@@ -3,6 +3,7 @@
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 #include <Fonts/FreeSans18pt7b.h>
+#include <math.h>
 
 #define SCREEN_WIDTH 64
 #define SCREEN_HEIGHT 128
@@ -63,8 +64,11 @@ void renderScoreNumber(int x, int y, int score, bool highlighted) {
 void renderScoreScreen() {
   display.clearDisplay();
 
-  renderScoreNumber(0, 0, score[0], true);
-  renderScoreNumber(0, SCREEN_HEIGHT/2, score[1], false);
+  int totalScore = score[0] + score[1];
+  double serving = fmod(floor((totalScore) / 2), 2);
+
+  renderScoreNumber(0, 0, score[0], serving == 0);
+  renderScoreNumber(0, SCREEN_HEIGHT/2, score[1], serving == 1);
 
   display.display();
 }
