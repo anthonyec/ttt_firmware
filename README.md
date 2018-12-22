@@ -16,7 +16,7 @@
 ### How undo works
 An array keeps a list of which player "won" a given point. When the undo action is performed, a point in subtracted from the player who won the last point.
 
-The orginal implentation to undo kept a list of both player scores in a 2D array. However, this used a lot more memory. With an array of who won the point, an array of 1 byte integars can be used instead of 2x 2byte integars.
+The orginal implentation for undo kept a list of both player scores in a 2D array. However, this used a lot more memory. With an array of who won the point, an array of 1 byte integars can be used. Instead of 2x 2 byte integars.
 
 #### Example
 
@@ -54,7 +54,7 @@ In this case, it will be Player 1 as player index `0` is at index `4` in the his
 
 ```fantastic psuedo c++
 currentHistoryIndex = 4
-history = [0, 1, 0, 0, 0, 1]
+history = [0, 1, 0, 0, 0, 1] // This does not change size on purpose.
 
 subtractScoreFromPlayer(history[currentHistoryIndex])
 ```
