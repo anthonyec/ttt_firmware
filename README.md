@@ -1,10 +1,10 @@
 # TTT Firmware
 ## Requirements
 ### Hardware
-- 2x OLED 0.96 inch display B/W
+- 2x SSD1306 OLED I2C 0.96" White Display
 - 2x Arduino Nano
-- 2x push buttons
-- 2x Bluetooth modules
+- 2x Push buttons
+- 2x HC-05 Bluetooth module
 
 ### Software
 #### Optional
