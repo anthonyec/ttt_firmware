@@ -7,7 +7,9 @@
 - 2x Bluetooth modules
 
 ### Software
-
+#### Optional
+ - [Fritzing](http://fritzing.org/download/) for schematics
+ 
 ## Setup
 
 ## Circuit
