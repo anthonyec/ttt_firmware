@@ -21,8 +21,15 @@ using namespace ace_button;
 #define PLUS_BUTTON_PIN 6
 #define UNDO_BUTTON_PIN 5
 
+#define SERIAL_COMMAND 99
+#define ADD_COMMAND 97
+#define UNDO_COMMAND 117
+#define RESET_COMMAND 114
+#define SYNC_COMMAND 115
+
 Adafruit_SSD1306 display(SCREEN_HEIGHT, SCREEN_WIDTH, &Wire, OLED_RESET);
 
+int incomingByte = 0;
 int score[] = {0, 0};
 int initalServe[] = {0, 1};
 int currentHistoryIndex = 0;
@@ -49,7 +56,7 @@ void setup() {
   display.setTextWrap(false);
   display.clearDisplay();
   display.setTextColor(WHITE);
-  display.setCursor(random(10, 50), random(10, 150));
+  display.setCursor(random(10, 50), random(10, 140));
   display.print("OK.");
   display.display();
 
@@ -107,11 +114,13 @@ void renderScoreScreen() {
   renderScoreNumber(0, 0, score[0], serving == initalServe[0]);
   renderScoreNumber(0, SCREEN_HEIGHT/2, score[1], serving == initalServe[1]);
 
-  display.setTextColor(WHITE, BLACK);
-  display.setCursor(5, 10);
-  display.setFont();
-  display.setTextSize(1);
-  display.print(currentHistoryIndex);
+  if (DEBUG) {
+    display.setTextColor(WHITE, BLACK);
+    display.setCursor(5, 10);
+    display.setFont();
+    display.setTextSize(1);
+    display.print(currentHistoryIndex);
+  }
 
   display.display();
 }
@@ -120,6 +129,22 @@ void loop() {
   plusButton.check();
   undoButton.check();
   renderScoreScreen();
+
+  if (Serial.available() > 0) {
+    incomingByte = Serial.read();
+
+    switch(incomingByte) {
+      case ADD_COMMAND:
+        addScoreForPlayer(0);
+        break;
+      case UNDO_COMMAND:
+        undo();
+        break;
+      case RESET_COMMAND:
+        reset();
+        break;
+    }
+  }
 }
 
 void addScoreForPlayer(int playerIndex) {
@@ -157,11 +182,13 @@ void handlePushButtonEvent(AceButton* button, uint8_t eventType, uint8_t buttonS
   uint8_t id = button->getId();
 
   switch (eventType) {
-    case AceButton::kEventReleased:
+    case AceButton::kEventPressed:
       if (id == 0) {
         addScoreForPlayer(1);
       }
+      break;
 
+    case AceButton::kEventReleased:
       if (id == 1 && currentHistoryIndex > 0) {
         undo();
       } else if (score[1] - 1 < 0) {
