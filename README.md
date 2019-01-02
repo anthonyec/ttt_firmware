@@ -15,9 +15,7 @@
 ## Setup
 
 ## Circuit
-It's messy, I know
-
-![Breadboard schematic](https://github.com/anthonyec/ttt_firmware/blob/master/docs/ttt_proto_schematic.png)
+![Breadboard schematic](https://github.com/anthonyec/ttt_firmware/blob/master/docs/ttt_proto_schematic_2.png)
 
 
 ## Docs
