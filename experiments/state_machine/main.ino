@@ -1,14 +1,17 @@
-const enum class State {
+enum class State {
   start,
   loading,
   error,
   success
 };
 
-const enum class Event {
+enum class Event {
   SUBMIT,
   REJECT,
-  RESOLVE
+  RESOLVE,
+
+  // Event::NONE acts as an event that is undefined or null.
+  NONE
 };
 
 State screenFsm(State state, Event event) {
@@ -29,6 +32,10 @@ State screenFsm(State state, Event event) {
         return State::error;
       }
 
+      if (event == Event::SUBMIT) {
+        return State::start;
+      }
+
       break;
 
     case State::error:
@@ -42,14 +49,76 @@ State screenFsm(State state, Event event) {
       break;
 
     default:
-      break;
+      return state;
   }
+
+  return state;
 }
 
-void setup() {
+State currentState = State::start;
+Event currentEvent = Event::NONE;
 
+void setup() {
+  Serial.begin(9600);
+  while (!Serial);
+  Serial.flush();
+  Serial.println("Setup");
 }
 
 void loop() {
+  printCurrentStateAndEvent();
 
+  if (Serial.available() > 0) {
+		String serialCommand = Serial.readString();
+		Serial.print("Serial->");
+		Serial.println(serialCommand);
+
+    if (serialCommand == "submit") {
+      currentEvent = Event::SUBMIT;
+    }
+
+    if (serialCommand == "resolve") {
+      currentEvent = Event::RESOLVE;
+    }
+	}
+
+  currentState = screenFsm(currentState, currentEvent);
+
+  // Reset current event or you'll end up in a loop in the FSM
+  currentEvent = Event::NONE;
+
+  delay(500);
+}
+
+void printCurrentStateAndEvent() {
+  switch(currentEvent) {
+    case Event::SUBMIT:
+      Serial.println("Event::SUBMIT");
+      break;
+    case Event::REJECT:
+      Serial.println("Event::REJECT");
+      break;
+    case Event::RESOLVE:
+      Serial.println("Event::RESOLVE");
+      break;
+    default:
+      break;
+  }
+
+  switch(currentState) {
+    case State::start:
+      Serial.println("State::start");
+      break;
+    case State::loading:
+      Serial.println("State::loading");
+      break;
+    case State::error:
+      Serial.println("State::error");
+      break;
+    case State::success:
+      Serial.println("State::success");
+      break;
+    default:
+      break;
+  }
 }
