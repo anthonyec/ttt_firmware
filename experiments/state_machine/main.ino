@@ -1,51 +1,83 @@
 enum class State {
   start,
-  loading,
-  error,
-  success
+  playing,
+  gameOver
 };
 
 enum class Event {
-  SUBMIT,
-  REJECT,
-  RESOLVE,
+  PRESS_ADD,
+  PRESS_UNDO,
+  HOLD_UNDO,
+  PLAYER_WON,
+  UNDO_HISTORY_START,
 
   // Event::NONE acts as an event that is undefined or null.
   NONE
 };
 
-State screenFsm(State state, Event event) {
+State gameFsm(State state, Event event) {
   switch(state) {
     case State::start:
-      if (event == Event::SUBMIT) {
-        return State::loading;
+      if (event == Event::PRESS_ADD) {
+        addScoreToPlayer();
+        return State::playing;
       }
 
-      break;
-
-    case State::loading:
-      if (event == Event::RESOLVE) {
-        return State::success;
+      if (event == Event::PRESS_UNDO) {
+        swapServe();
+        return State::start;
       }
 
-      if (event == Event::REJECT) {
-        return State::error;
-      }
-
-      if (event == Event::SUBMIT) {
+      if (event == Event::HOLD_UNDO) {
+        resetGame();
         return State::start;
       }
 
       break;
 
-    case State::error:
-      if (event == Event::SUBMIT) {
-        return State::loading;
+    case State::playing:
+      if (event == Event::PRESS_ADD) {
+        addScoreToPlayer();
+        return State::playing;
+      }
+
+      if (event == Event::PRESS_UNDO) {
+        undo();
+        return State::playing;
+      }
+
+      if (event == Event::HOLD_UNDO) {
+        resetGame();
+        return State::start;
+      }
+
+      if (event == Event::PLAYER_WON) {
+        playSomeNiceCelebrationMusic();
+        return State::gameOver;
+      }
+
+      if (event == Event::UNDO_HISTORY_START) {
+        return State::start;
       }
 
       break;
 
-    case State::success:
+    case State::gameOver:
+      if (event == Event::PRESS_ADD) {
+        resetGame();
+        return State::start;
+      }
+
+      if (event == Event::PRESS_UNDO) {
+        undo();
+        return State::playing;
+      }
+
+      if (event == Event::HOLD_UNDO) {
+        resetGame();
+        return State::start;
+      }
+
       break;
 
     default:
@@ -73,16 +105,28 @@ void loop() {
 		Serial.print("Serial->");
 		Serial.println(serialCommand);
 
-    if (serialCommand == "submit") {
-      currentEvent = Event::SUBMIT;
+    if (serialCommand == "press add") {
+      currentEvent = Event::PRESS_ADD;
     }
 
-    if (serialCommand == "resolve") {
-      currentEvent = Event::RESOLVE;
+    if (serialCommand == "press undo") {
+      currentEvent = Event::PRESS_UNDO;
+    }
+
+    if (serialCommand == "hold undo") {
+      currentEvent = Event::HOLD_UNDO;
+    }
+
+    if (serialCommand == "player won") {
+      currentEvent = Event::PLAYER_WON;
+    }
+
+    if (serialCommand == "undo history start") {
+      currentEvent = Event::UNDO_HISTORY_START;
     }
 	}
 
-  currentState = screenFsm(currentState, currentEvent);
+  currentState = gameFsm(currentState, currentEvent);
 
   // Reset current event or you'll end up in a loop in the FSM
   currentEvent = Event::NONE;
@@ -92,14 +136,20 @@ void loop() {
 
 void printCurrentStateAndEvent() {
   switch(currentEvent) {
-    case Event::SUBMIT:
-      Serial.println("Event::SUBMIT");
+    case Event::PRESS_ADD:
+      Serial.println("Event::PRESS_ADD");
       break;
-    case Event::REJECT:
-      Serial.println("Event::REJECT");
+    case Event::PRESS_UNDO:
+      Serial.println("Event::PRESS_UNDO");
       break;
-    case Event::RESOLVE:
-      Serial.println("Event::RESOLVE");
+    case Event::HOLD_UNDO:
+      Serial.println("Event::HOLD_UNDO");
+      break;
+    case Event::PLAYER_WON:
+      Serial.println("Event::PLAYER_WON");
+      break;
+    case Event::UNDO_HISTORY_START:
+      Serial.println("Event::UNDO_HISTORY_START");
       break;
     default:
       break;
@@ -109,16 +159,33 @@ void printCurrentStateAndEvent() {
     case State::start:
       Serial.println("State::start");
       break;
-    case State::loading:
-      Serial.println("State::loading");
+    case State::playing:
+      Serial.println("State::playing");
       break;
-    case State::error:
-      Serial.println("State::error");
-      break;
-    case State::success:
-      Serial.println("State::success");
+    case State::gameOver:
+      Serial.println("State::gameOver");
       break;
     default:
       break;
   }
+}
+
+void undo() {
+  Serial.println("undo()");
+}
+
+void resetGame() {
+  Serial.println("resetGame()");
+}
+
+void swapServe() {
+  Serial.println("swapServe()");
+}
+
+void addScoreToPlayer() {
+  Serial.println("addScoreToPlayer()");
+}
+
+void playSomeNiceCelebrationMusic() {
+  Serial.println("playSomeNiceCelebrationMusic()");
 }
