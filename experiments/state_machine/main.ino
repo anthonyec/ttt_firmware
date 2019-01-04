@@ -1,3 +1,17 @@
+#include <AceButton.h>
+using namespace ace_button;
+#include <AdjustableButtonConfig.h>
+#include <ButtonConfig.h>
+
+enum class State;
+enum class Event;
+
+ButtonConfig pushButtonConfig;
+AceButton plusButton(&pushButtonConfig);
+AceButton undoButton(&pushButtonConfig);
+
+void handlePushButtonEvent(AceButton*, uint8_t, uint8_t);
+
 enum class State {
   start,
   playing,
@@ -95,6 +109,13 @@ void setup() {
   while (!Serial);
   Serial.flush();
   Serial.println("Setup");
+
+  pushButtonConfig.setEventHandler(handlePushButtonEvent);
+  pushButtonConfig.setFeature(ButtonConfig::kFeatureLongPress);
+  pushButtonConfig.setFeature(ButtonConfig::kFeatureSuppressAfterLongPress);
+
+  plusButton.init(6, LOW, 0);
+  undoButton.init(5, LOW, 1);
 }
 
 void loop() {
@@ -126,30 +147,40 @@ void loop() {
     }
 	}
 
+  plusButton.check();
+  undoButton.check();
+
   currentState = gameFsm(currentState, currentEvent);
 
   // Reset current event or you'll end up in a loop in the FSM
   currentEvent = Event::NONE;
+}
 
-  delay(500);
+String lastPrint = "";
+
+void printOnce(String str) {
+  if (lastPrint != str) {
+    lastPrint = str;
+    Serial.println(str);
+  }
 }
 
 void printCurrentStateAndEvent() {
   switch(currentEvent) {
     case Event::PRESS_ADD:
-      Serial.println("Event::PRESS_ADD");
+      printOnce("Event::PRESS_ADD");
       break;
     case Event::PRESS_UNDO:
-      Serial.println("Event::PRESS_UNDO");
+      printOnce("Event::PRESS_UNDO");
       break;
     case Event::HOLD_UNDO:
-      Serial.println("Event::HOLD_UNDO");
+      printOnce("Event::HOLD_UNDO");
       break;
     case Event::PLAYER_WON:
-      Serial.println("Event::PLAYER_WON");
+      printOnce("Event::PLAYER_WON");
       break;
     case Event::UNDO_HISTORY_START:
-      Serial.println("Event::UNDO_HISTORY_START");
+      printOnce("Event::UNDO_HISTORY_START");
       break;
     default:
       break;
@@ -157,13 +188,13 @@ void printCurrentStateAndEvent() {
 
   switch(currentState) {
     case State::start:
-      Serial.println("State::start");
+      printOnce("State::start");
       break;
     case State::playing:
-      Serial.println("State::playing");
+      printOnce("State::playing");
       break;
     case State::gameOver:
-      Serial.println("State::gameOver");
+      printOnce("State::gameOver");
       break;
     default:
       break;
@@ -188,4 +219,34 @@ void addScoreToPlayer() {
 
 void playSomeNiceCelebrationMusic() {
   Serial.println("playSomeNiceCelebrationMusic()");
+}
+
+void handlePushButtonEvent(AceButton* button, uint8_t eventType, uint8_t buttonState) {
+  uint8_t id = button->getId();
+
+  switch (eventType) {
+    case AceButton::kEventPressed:
+      switch(id) {
+        case 0:
+          Serial.println("handlePushButtonEvent()->kEventPressed->Event::PRESS_ADD");
+          currentEvent = Event::PRESS_ADD;
+          break;
+        case 1:
+          Serial.println("handlePushButtonEvent()->kEventPressed->Event::PRESS_UNDO");
+          currentEvent = Event::PRESS_UNDO;
+          break;
+      }
+      break;
+    case AceButton::kEventLongPressed:
+      currentEvent = Event::HOLD_UNDO;
+      switch(id) {
+        case 0:
+          break;
+        case 1:
+          Serial.println("handlePushButtonEvent()->kEventPressed->Event::HOLD_UNDO");
+          currentEvent = Event::HOLD_UNDO;
+          break;
+      }
+      break;
+  }
 }
