@@ -1,6 +1,7 @@
 #include <math.h>
 #include <SPI.h>
 #include <Wire.h>
+#include <SoftwareSerial.h>
 
 #include <AceButton.h>
 using namespace ace_button;
@@ -17,6 +18,8 @@ using namespace ace_button;
 #define OLED_RESET 4
 #define TEXT_NUDGE_X 4
 #define TEXT_NUDGE_Y 2
+#define BLUETOOTH_SPEED 38400
+#define BLUETOOTH_COMMAND_PIN 9
 
 enum class State;
 enum class Event;
@@ -24,8 +27,8 @@ enum class Event;
 ButtonConfig pushButtonConfig;
 AceButton plusButton(&pushButtonConfig);
 AceButton undoButton(&pushButtonConfig);
-
 Adafruit_SSD1306 display(SCREEN_HEIGHT, SCREEN_WIDTH, &Wire, OLED_RESET);
+SoftwareSerial bluetooth(10, 11);
 
 void handlePushButtonEvent(AceButton*, uint8_t, uint8_t);
 bool hasEnteredState();
@@ -45,6 +48,9 @@ enum class State {
 };
 
 enum class Event {
+  RECEIVE_ADD,
+  RECEIVE_UNDO,
+  RECEIVE_RESET,
   PRESS_ADD,
   RELEASE_UNDO,
   HOLD_UNDO,
@@ -66,20 +72,19 @@ uint8_t history[99] = {};
 void setup() {
   Serial.begin(9600);
   while (!Serial);
-  Serial.flush();
-  Serial.println(F("Setup"));
+
+  bluetooth.begin(BLUETOOTH_SPEED);
+  while (!bluetooth);
+
+  Serial.println(F("[SETUP START]"));
 
   display.begin(SSD1306_SWITCHCAPVCC, 0x3C);
   display.setRotation(1);
   display.setTextWrap(false);
   display.clearDisplay();
-  display.setTextColor(WHITE);
-  display.setCursor(random(10, 50), random(10, 140));
-  display.print(F("OK."));
   display.display();
-  display.setFont(&FreeSans18pt7b);
-
-  delay(1000);
+  display.setTextColor(WHITE);
+  display.setCursor(0, 0);
 
   pushButtonConfig.setEventHandler(handlePushButtonEvent);
   pushButtonConfig.setFeature(ButtonConfig::kFeatureLongPress);
@@ -87,18 +92,30 @@ void setup() {
 
   plusButton.init(6, LOW, 0);
   undoButton.init(5, LOW, 1);
+
+  delay(2000);
 }
 
 void loop() {
   plusButton.check();
   undoButton.check();
 
-  if (Serial.available() > 0) {
-    uint8_t incomingByte = Serial.read();
+  while (bluetooth.available() > 0) {
+    char incoming = bluetooth.read();
 
-    if (incomingByte == 97) {
-      addScoreForPlayer(0);
+    if (incoming == 97) {
+      dispatchEvent(Event::RECEIVE_ADD);
     }
+
+    if (incoming == 114) {
+      dispatchEvent(Event::RECEIVE_RESET);
+    }
+
+    if (incoming == 117) {
+      dispatchEvent(Event::RECEIVE_UNDO);
+    }
+
+    Serial.write(incoming);
   }
 
   State newState = gameFsm(currentState, currentEvent);
@@ -131,12 +148,22 @@ State gameFsm(State state, Event event) {
         Serial.println(F("Entered State::start"));
       }
 
+      if (event == Event::RECEIVE_ADD) {
+        addScoreForPlayer(0);
+        return State::playing;
+      }
+
       if (event == Event::PRESS_ADD) {
         addScoreForPlayer(1);
+        bluetooth.print("a");
         return State::playing;
       }
 
       if (event == Event::RELEASE_UNDO) {
+        bluetooth.print("u");
+      }
+
+      if (event == Event::RELEASE_UNDO || event == Event::RECEIVE_UNDO) {
         swapServe();
         return State::start;
       }
@@ -150,17 +177,31 @@ State gameFsm(State state, Event event) {
       break;
 
     case State::playing:
+      if (event == Event::RECEIVE_ADD) {
+        addScoreForPlayer(0);
+        return State::playing;
+      }
+
       if (event == Event::PRESS_ADD) {
         addScoreForPlayer(1);
+        bluetooth.print("a");
         return State::playing;
       }
 
       if (event == Event::RELEASE_UNDO) {
+        bluetooth.print("u");
+      }
+
+      if (event == Event::RELEASE_UNDO || event == Event::RECEIVE_UNDO) {
         undo();
         return State::playing;
       }
 
       if (event == Event::HOLD_UNDO) {
+        bluetooth.print("r");
+      }
+
+      if (event == Event::HOLD_UNDO || event == Event::RECEIVE_RESET) {
         resetGame();
         return State::start;
       }
@@ -180,15 +221,24 @@ State gameFsm(State state, Event event) {
     case State::gameOver:
       if (event == Event::PRESS_ADD) {
         resetGame();
+        bluetooth.print("r");
         return State::start;
       }
 
       if (event == Event::RELEASE_UNDO) {
+        bluetooth.print("u");
+      }
+
+      if (event == Event::RELEASE_UNDO || event == Event::RECEIVE_UNDO) {
         undo();
         return State::playing;
       }
 
       if (event == Event::HOLD_UNDO) {
+        bluetooth.print("r");
+      }
+
+      if (event == Event::HOLD_UNDO || event == Event::RECEIVE_RESET) {
         resetGame();
         return State::start;
       }
@@ -324,6 +374,8 @@ void renderScoreNumber(uint8_t x, uint8_t y, uint8_t score, bool highlighted) {
   }
 
   display.setTextSize(textSize);
+
+  // This is causing some glitchyness on the top-right of the screen.
   display.getTextBounds(buffer, x, y, &textX, &textY, &textWidth, &textHeight);
   display.setCursor(x + (SCREEN_WIDTH / 2) - (textWidth / 2) - TEXT_NUDGE_X, y + (SCREEN_HEIGHT / 2 / 2) + (textHeight / 2) - TEXT_NUDGE_Y);
   display.print(score);

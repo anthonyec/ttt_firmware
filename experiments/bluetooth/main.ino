@@ -27,46 +27,41 @@ void setup() {
   digitalWrite(9, HIGH);
 
   Serial.begin(9600);
+  while (!Serial);
 
-  while (!Serial) {
-    ; // wait for serial port to connect. Needed for Leonardo only
-  }
+  mySerial.begin(38400);
+  while (!mySerial);
+
+  delay(2000);
 
   Serial.write("Start Setup\r\n");
 
-  // for(int i = 0; i<11; i++) {
-  //   const long int speed = speeds[i];
-  //   Serial.write("Check speed: ");
-  //   Serial.print(speeds[i]);
-  //   Serial.write(". Is ok? ");
-  //   mySerial.begin(speed);
-  //   mySerial.print("AT\r\n");
-  //   waitForResponse();
-  //   Serial.write("\r\n");
-  //   mySerial.end();
-  // }
+  // checkForBT();
 
-  delay(2000);
-  mySerial.begin(BLUETOOTH_SPEED);
-  delay(2000);
+  // delay(2000);
+  // mySerial.begin(9600);
+  // delay(2000);
 
-  Serial.write("AT Setup\r\n");
-
-  // // // Should respond with OK
-  mySerial.print("AT\r\n");
-  waitForResponse();
-
-  // mySerial.print("AT+ORGL\r\n");
+  // Serial.write("AT Setup\r\n");
+  // mySerial.print("AT\r\n");
   // waitForResponse();
 
-  mySerial.print("AT+ADDR?\r\n");
+  // // mySerial.print("AT+ORGL\r\n");
+  // // waitForResponse();
+
+  // Serial.write("AT+UART=9600,0,0\r\n");
+  // mySerial.print("AT+UART=9600,0,0\r\n");
   // waitForResponse();
 
-  Serial.write("End response\r\n");
+  // Serial.write("ADDR?\r\n");
+  // mySerial.print("AT+ADDR?\r\n");
+  // waitForResponse();
+
+  // Serial.write("End response\r\n");
 }
 
 void waitForResponse() {
-  delay(1000);
+  delay(2000);
 
   while (mySerial.available()) {
     Serial.write(mySerial.read());
@@ -75,6 +70,27 @@ void waitForResponse() {
   Serial.write("\n");
 }
 
-void loop() {
+void checkForBT() {
+  for(int i = 0; i<11; i++) {
+    const long int speed = speeds[i];
+    Serial.write("Check speed: ");
+    Serial.print(speeds[i]);
+    Serial.write(". Is ok? ");
+    mySerial.begin(speed);
+    mySerial.print("AT\r\n");
+    waitForResponse();
+    Serial.write("\r\n");
+    mySerial.end();
+  }
+}
 
+void loop() {
+  if (mySerial.available()) {
+    Serial.write(mySerial.read());
+  }
+
+  if (Serial.available()) {
+    Serial.println(Serial.readString());
+    mySerial.print(Serial.read());
+  }
 }
