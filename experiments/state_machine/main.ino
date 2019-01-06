@@ -11,16 +11,20 @@ AceButton plusButton(&pushButtonConfig);
 AceButton undoButton(&pushButtonConfig);
 
 void handlePushButtonEvent(AceButton*, uint8_t, uint8_t);
+bool hasEnteredState();
+void dispatchEvent(Event);
+void resetTimer();
 
 enum class State {
   start,
   playing,
-  gameOver
+  gameOver,
+  none
 };
 
 enum class Event {
   PRESS_ADD,
-  PRESS_UNDO,
+  RELEASE_UNDO,
   HOLD_UNDO,
   PLAYER_WON,
   UNDO_HISTORY_START,
@@ -29,21 +33,28 @@ enum class Event {
   NONE
 };
 
+bool isNewState = true;
+unsigned long startTime = millis();
+
 State gameFsm(State state, Event event) {
   switch(state) {
     case State::start:
+      if (hasEnteredState()) {
+        Serial.println("Entered State::start");
+      }
+
       if (event == Event::PRESS_ADD) {
         addScoreToPlayer();
         return State::playing;
       }
 
-      if (event == Event::PRESS_UNDO) {
+      if (event == Event::RELEASE_UNDO) {
         swapServe();
         return State::start;
       }
 
       if (event == Event::HOLD_UNDO) {
-        resetGame();
+        mainMenu();
         return State::start;
       }
 
@@ -55,7 +66,7 @@ State gameFsm(State state, Event event) {
         return State::playing;
       }
 
-      if (event == Event::PRESS_UNDO) {
+      if (event == Event::RELEASE_UNDO) {
         undo();
         return State::playing;
       }
@@ -77,12 +88,22 @@ State gameFsm(State state, Event event) {
       break;
 
     case State::gameOver:
+      if (hasEnteredState()) {
+        Serial.println("Entered State::gameOver");
+        resetTimer();
+      }
+
+      if ((millis() - startTime) > 5000) {
+        Serial.println("Timer ended State::gameOver");
+        return State::start;
+      }
+
       if (event == Event::PRESS_ADD) {
         resetGame();
         return State::start;
       }
 
-      if (event == Event::PRESS_UNDO) {
+      if (event == Event::RELEASE_UNDO) {
         undo();
         return State::playing;
       }
@@ -101,8 +122,21 @@ State gameFsm(State state, Event event) {
   return state;
 }
 
+State previousState = State::none;
 State currentState = State::start;
 Event currentEvent = Event::NONE;
+
+void dispatchEvent(Event event) {
+  currentEvent = event;
+}
+
+bool hasEnteredState() {
+  return isNewState;
+}
+
+void resetTimer() {
+  startTime = millis();
+}
 
 void setup() {
   Serial.begin(9600);
@@ -131,7 +165,7 @@ void loop() {
     }
 
     if (serialCommand == "press undo") {
-      currentEvent = Event::PRESS_UNDO;
+      currentEvent = Event::RELEASE_UNDO;
     }
 
     if (serialCommand == "hold undo") {
@@ -150,7 +184,15 @@ void loop() {
   plusButton.check();
   undoButton.check();
 
-  currentState = gameFsm(currentState, currentEvent);
+  State newState = gameFsm(currentState, currentEvent);
+
+  if (newState != currentState) {
+    isNewState = true;
+  } else {
+    isNewState = false;
+  }
+
+  currentState = newState;
 
   // Reset current event or you'll end up in a loop in the FSM
   currentEvent = Event::NONE;
@@ -170,8 +212,8 @@ void printCurrentStateAndEvent() {
     case Event::PRESS_ADD:
       printOnce("Event::PRESS_ADD");
       break;
-    case Event::PRESS_UNDO:
-      printOnce("Event::PRESS_UNDO");
+    case Event::RELEASE_UNDO:
+      printOnce("Event::RELEASE_UNDO");
       break;
     case Event::HOLD_UNDO:
       printOnce("Event::HOLD_UNDO");
@@ -201,6 +243,10 @@ void printCurrentStateAndEvent() {
   }
 }
 
+void mainMenu() {
+  Serial.println("mainMenu()");
+}
+
 void undo() {
   Serial.println("undo()");
 }
@@ -226,27 +272,25 @@ void handlePushButtonEvent(AceButton* button, uint8_t eventType, uint8_t buttonS
 
   switch (eventType) {
     case AceButton::kEventPressed:
-      switch(id) {
-        case 0:
-          Serial.println("handlePushButtonEvent()->kEventPressed->Event::PRESS_ADD");
-          currentEvent = Event::PRESS_ADD;
-          break;
-        case 1:
-          Serial.println("handlePushButtonEvent()->kEventPressed->Event::PRESS_UNDO");
-          currentEvent = Event::PRESS_UNDO;
-          break;
+      if (id == 0) {
+        dispatchEvent(Event::PRESS_ADD);
       }
+
+      break;
+
+    case AceButton::kEventReleased:
+      if (id == 1) {
+        dispatchEvent(Event::RELEASE_UNDO);
+      }
+
       break;
     case AceButton::kEventLongPressed:
-      currentEvent = Event::HOLD_UNDO;
-      switch(id) {
-        case 0:
-          break;
-        case 1:
-          Serial.println("handlePushButtonEvent()->kEventPressed->Event::HOLD_UNDO");
-          currentEvent = Event::HOLD_UNDO;
-          break;
+      if (id == 1) {
+        dispatchEvent(Event::HOLD_UNDO);
       }
+
+      break;
+    default:
       break;
   }
 }

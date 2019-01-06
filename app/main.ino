@@ -1,5 +1,4 @@
 #include <math.h>
-#include <stdlib.h>
 #include <SPI.h>
 #include <Wire.h>
 
@@ -12,44 +11,63 @@ using namespace ace_button;
 #include <Adafruit_SSD1306.h>
 #include <Fonts/FreeSans18pt7b.h>
 
+#define DEBUG false
 #define SCREEN_WIDTH 64
 #define SCREEN_HEIGHT 128
 #define OLED_RESET 4
 #define TEXT_NUDGE_X 4
 #define TEXT_NUDGE_Y 2
-#define DEBUG false
-#define PLUS_BUTTON_PIN 6
-#define UNDO_BUTTON_PIN 5
 
-#define SERIAL_COMMAND 99
-#define ADD_COMMAND 97
-#define UNDO_COMMAND 117
-#define RESET_COMMAND 114
-#define SYNC_COMMAND 115
-
-Adafruit_SSD1306 display(SCREEN_HEIGHT, SCREEN_WIDTH, &Wire, OLED_RESET);
-
-int incomingByte = 0;
-int score[] = {0, 0};
-int initalServe[] = {0, 1};
-int currentHistoryIndex = 0;
-uint8_t history[99] = {};
+enum class State;
+enum class Event;
 
 ButtonConfig pushButtonConfig;
 AceButton plusButton(&pushButtonConfig);
 AceButton undoButton(&pushButtonConfig);
 
-void handlePlusButtonEvent(AceButton*, uint8_t, uint8_t);
-void handleUndoButtonEvent(AceButton*, uint8_t, uint8_t);
+Adafruit_SSD1306 display(SCREEN_HEIGHT, SCREEN_WIDTH, &Wire, OLED_RESET);
+
 void handlePushButtonEvent(AceButton*, uint8_t, uint8_t);
+bool hasEnteredState();
+void dispatchEvent(Event);
+void renderMainMenu();
+void renderGameOverScreen();
+void renderScoreScreen();
+void renderScoreNumber(uint8_t, uint8_t, uint8_t, bool);
+State gameFsm();
+
+enum class State {
+  mainMenu,
+  start,
+  playing,
+  gameOver,
+  none
+};
+
+enum class Event {
+  PRESS_ADD,
+  RELEASE_UNDO,
+  HOLD_UNDO,
+  PLAYER_WON,
+  UNDO_HISTORY_START,
+  NONE
+};
+
+bool isNewState = true;
+State previousState = State::none;
+State currentState = State::start;
+Event currentEvent = Event::NONE;
+
+uint8_t score[] = {0, 0};
+uint8_t initalServe[] = {0, 1};
+uint8_t currentHistoryIndex = 0;
+uint8_t history[99] = {};
 
 void setup() {
   Serial.begin(9600);
-  while (! Serial);
-
-  randomSeed(analogRead(0));
-
-  Serial.println("Setup:start");
+  while (!Serial);
+  Serial.flush();
+  Serial.println(F("Setup"));
 
   display.begin(SSD1306_SWITCHCAPVCC, 0x3C);
   display.setRotation(1);
@@ -57,9 +75,8 @@ void setup() {
   display.clearDisplay();
   display.setTextColor(WHITE);
   display.setCursor(random(10, 50), random(10, 140));
-  display.print("OK.");
+  display.print(F("OK."));
   display.display();
-
   display.setFont(&FreeSans18pt7b);
 
   delay(1000);
@@ -68,114 +85,162 @@ void setup() {
   pushButtonConfig.setFeature(ButtonConfig::kFeatureLongPress);
   pushButtonConfig.setFeature(ButtonConfig::kFeatureSuppressAfterLongPress);
 
-  plusButton.init(PLUS_BUTTON_PIN, LOW, 0);
-  undoButton.init(UNDO_BUTTON_PIN, LOW, 1);
-
-  Serial.println("Setup:end");
-}
-
-void renderScoreNumber(int x, int y, int score, bool highlighted) {
-  if (score > 9) {
-    display.setTextSize(1);
-  } else {
-    display.setTextSize(2);
-  }
-
-  char buffer[7];
-  itoa(score, buffer, 10);
-
-  int16_t textX, textY;
-  uint16_t textWidth, textHeight;
-
-  if (highlighted) {
-    display.fillRoundRect(x, y, SCREEN_WIDTH, SCREEN_HEIGHT / 2, 4, WHITE);
-    display.setTextColor(BLACK);
-  } else {
-    display.setTextColor(WHITE);
-  }
-
-  display.getTextBounds(buffer, x, y, &textX, &textY, &textWidth, &textHeight);
-
-  if (DEBUG) {
-    display.drawRect(x + (SCREEN_WIDTH / 2) - (textWidth / 2), y + (SCREEN_HEIGHT / 2 / 2) - (textHeight / 2), textWidth, textHeight, WHITE);
-  }
-
-  display.setCursor(x + (SCREEN_WIDTH / 2) - (textWidth / 2) - TEXT_NUDGE_X, y + (SCREEN_HEIGHT / 2 / 2) + (textHeight / 2) - TEXT_NUDGE_Y);
-  display.print(score);
-}
-
-void renderScoreScreen() {
-  display.clearDisplay();
-  display.setFont(&FreeSans18pt7b);
-
-  int totalScore = score[0] + score[1];
-  double serving = fmod(floor((totalScore) / 2), 2);
-
-  renderScoreNumber(0, 0, score[0], serving == initalServe[0]);
-  renderScoreNumber(0, SCREEN_HEIGHT/2, score[1], serving == initalServe[1]);
-
-  if (DEBUG) {
-    display.setTextColor(WHITE, BLACK);
-    display.setCursor(5, 10);
-    display.setFont();
-    display.setTextSize(1);
-    display.print(currentHistoryIndex);
-  }
-
-  display.display();
+  plusButton.init(6, LOW, 0);
+  undoButton.init(5, LOW, 1);
 }
 
 void loop() {
   plusButton.check();
   undoButton.check();
-  renderScoreScreen();
 
   if (Serial.available() > 0) {
-    incomingByte = Serial.read();
+    uint8_t incomingByte = Serial.read();
 
-    switch(incomingByte) {
-      case ADD_COMMAND:
-        addScoreForPlayer(0);
-        break;
-      case UNDO_COMMAND:
-        undo();
-        break;
-      case RESET_COMMAND:
-        reset();
-        break;
+    if (incomingByte == 97) {
+      addScoreForPlayer(0);
     }
+  }
+
+  State newState = gameFsm(currentState, currentEvent);
+
+  if (newState != currentState) {
+    isNewState = true;
+  } else {
+    isNewState = false;
+  }
+
+  currentState = newState;
+
+  // Reset current event or you'll end up in a loop in the FSM
+  currentEvent = Event::NONE;
+}
+
+State gameFsm(State state, Event event) {
+  switch(state) {
+    case State::mainMenu:
+      if (event == Event::PRESS_ADD) {
+        return State::start;
+      }
+
+      renderMainMenu();
+
+      break;
+
+    case State::start:
+      if (hasEnteredState()) {
+        Serial.println(F("Entered State::start"));
+      }
+
+      if (event == Event::PRESS_ADD) {
+        addScoreForPlayer(1);
+        return State::playing;
+      }
+
+      if (event == Event::RELEASE_UNDO) {
+        swapServe();
+        return State::start;
+      }
+
+      if (event == Event::HOLD_UNDO) {
+        return State::mainMenu;
+      }
+
+      renderScoreScreen();
+
+      break;
+
+    case State::playing:
+      if (event == Event::PRESS_ADD) {
+        addScoreForPlayer(1);
+        return State::playing;
+      }
+
+      if (event == Event::RELEASE_UNDO) {
+        undo();
+        return State::playing;
+      }
+
+      if (event == Event::HOLD_UNDO) {
+        resetGame();
+        return State::start;
+      }
+
+      if ((score[0] >= 11 || score[1] >= 11) && abs(score[0] - score[1]) >= 2) {
+        return State::gameOver;
+      }
+
+      if (currentHistoryIndex == 0) {
+        return State::start;
+      }
+
+      renderScoreScreen();
+
+      break;
+
+    case State::gameOver:
+      if (event == Event::PRESS_ADD) {
+        resetGame();
+        return State::start;
+      }
+
+      if (event == Event::RELEASE_UNDO) {
+        undo();
+        return State::playing;
+      }
+
+      if (event == Event::HOLD_UNDO) {
+        resetGame();
+        return State::start;
+      }
+
+      renderGameOverScreen();
+
+      break;
+
+    default:
+      return state;
+  }
+
+  return state;
+}
+
+void dispatchEvent(Event event) {
+  currentEvent = event;
+}
+
+bool hasEnteredState() {
+  return isNewState;
+}
+
+void undo() {
+  if (currentHistoryIndex - 1 >= 0) {
+    uint8_t  playerIndexToSubtractScoreFrom = history[currentHistoryIndex - 1];
+    subtractScoreForPlayer(playerIndexToSubtractScoreFrom);
+    currentHistoryIndex -= 1;
   }
 }
 
-void addScoreForPlayer(int playerIndex) {
+void resetGame() {
+  score[0] = 0;
+  score[1] = 0;
+  currentHistoryIndex = 0;
+}
+
+void swapServe() {
+  uint8_t temp0 = initalServe[0];
+  initalServe[0] = initalServe[1];
+  initalServe[1] = temp0;
+}
+
+void addScoreForPlayer(uint8_t playerIndex) {
   history[currentHistoryIndex] = playerIndex;
 
   score[playerIndex] += 1;
   currentHistoryIndex += 1;
 }
 
-void subtractScoreForPlayer(int playerIndex) {
+void subtractScoreForPlayer(uint8_t playerIndex) {
   score[playerIndex] -= 1;
-}
-
-void undo() {
-  if (currentHistoryIndex - 1 >= 0) {
-    int playerIndexToSubtractScoreFrom = history[currentHistoryIndex - 1];
-    subtractScoreForPlayer(playerIndexToSubtractScoreFrom);
-    currentHistoryIndex -= 1;
-  }
-}
-
-void reset() {
-  score[0] = 0;
-  score[1] = 0;
-  currentHistoryIndex = 0;
-}
-
-void flipIntialServe() {
-  int temp0 = initalServe[0];
-  initalServe[0] = initalServe[1];
-  initalServe[1] = temp0;
 }
 
 void handlePushButtonEvent(AceButton* button, uint8_t eventType, uint8_t buttonState) {
@@ -184,23 +249,82 @@ void handlePushButtonEvent(AceButton* button, uint8_t eventType, uint8_t buttonS
   switch (eventType) {
     case AceButton::kEventPressed:
       if (id == 0) {
-        addScoreForPlayer(1);
+        dispatchEvent(Event::PRESS_ADD);
       }
+
       break;
 
     case AceButton::kEventReleased:
-      if (id == 1 && currentHistoryIndex > 0) {
-        undo();
-      } else if (score[1] - 1 < 0) {
-        flipIntialServe();
+      if (id == 1) {
+        dispatchEvent(Event::RELEASE_UNDO);
       }
 
       break;
     case AceButton::kEventLongPressed:
       if (id == 1) {
-        reset();
+        dispatchEvent(Event::HOLD_UNDO);
       }
 
       break;
+    default:
+      break;
   }
+}
+
+void renderMainMenu() {
+  display.clearDisplay();
+  display.setCursor(0, 0);
+  display.setTextSize(2);
+  display.setTextColor(WHITE);
+  display.setFont();
+  display.print(F("MENU"));
+
+  display.fillRoundRect(0, 30, SCREEN_WIDTH, 32, 4, WHITE);
+
+  display.display();
+}
+
+void renderGameOverScreen() {
+  display.clearDisplay();
+  display.setCursor(5, 50);
+  display.setTextSize(1);
+  display.setTextColor(WHITE);
+  display.print(F("WIN!"));
+  display.display();
+}
+
+void renderScoreScreen() {
+  display.clearDisplay();
+  display.setFont(&FreeSans18pt7b);
+
+  uint8_t scoreDifference = abs(score[0] - score[1]);
+  uint8_t scoreTotal = score[0] + score[1];
+  uint8_t numberOfServes = (scoreDifference <= 1 && (scoreTotal >= 19)) ? 1 : 2;
+  float serving = fmod(floor((scoreTotal) / numberOfServes), 2);
+
+  renderScoreNumber(0, 0, score[0], serving == initalServe[0]);
+  renderScoreNumber(0, SCREEN_HEIGHT/2, score[1], serving == initalServe[1]);
+
+  display.display();
+}
+
+void renderScoreNumber(uint8_t x, uint8_t y, uint8_t score, bool highlighted) {
+  uint8_t textSize = score > 9 ? 1 : 2;
+  int16_t textX, textY;
+  uint16_t textWidth, textHeight;
+  char buffer[7];
+  itoa(score, buffer, 10);
+
+
+  if (highlighted) {
+    display.fillRoundRect(x, y, SCREEN_WIDTH, SCREEN_HEIGHT / 2, 4, WHITE);
+    display.setTextColor(BLACK);
+  } else {
+    display.setTextColor(WHITE);
+  }
+
+  display.setTextSize(textSize);
+  display.getTextBounds(buffer, x, y, &textX, &textY, &textWidth, &textHeight);
+  display.setCursor(x + (SCREEN_WIDTH / 2) - (textWidth / 2) - TEXT_NUDGE_X, y + (SCREEN_HEIGHT / 2 / 2) + (textHeight / 2) - TEXT_NUDGE_Y);
+  display.print(score);
 }
