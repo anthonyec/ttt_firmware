@@ -13,10 +13,15 @@
  - [Fritzing](http://fritzing.org/download/) for schematics
  
 ## Setup
+### Board Configuration
 
-## Circuit
+I've had more luck with using **old bootloader** for some reason.
+
+| Setting    | Value                              |
+| ---------- | ---------------------------------- |
+| Board      | Arduino Nano (Arduino AVR Boards)  |
+| Processor  | ATmega328P (Old Bootloader)        |
+| Programmer | AVRISP mkII                        | 
+
+### Circuit
 ![Breadboard schematic](https://github.com/anthonyec/ttt_firmware/blob/master/docs/ttt_proto_schematic_2.png)
-
-
-## Docs
-[Wiki](/wiki)
